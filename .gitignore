@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+.vite/
+
+# JetBrains IDEs (WebStorm, IntelliJ IDEA, and related products)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code and Fleet workspace state
+.vscode/
+.fleet/
+*.code-workspace
+
+# TypeScript editor/build caches
+*.tsbuildinfo
