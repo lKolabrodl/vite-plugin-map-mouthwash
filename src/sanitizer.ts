@@ -7,6 +7,43 @@ export const SUPPORTED_LANGUAGES = ['ar', 'en', 'es', 'fr', 'ru'] as const
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]
 
+export const DEFAULT_LANGUAGES = ['en'] as const satisfies readonly SupportedLanguage[]
+
+const COMMENT_WORD_PATTERN =
+  /[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:[@$+!*][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*/gu
+const OBFUSCATION_PATTERN = /[@$+!*]/u
+const ALPHANUMERIC_PATTERN = /[\p{L}\p{N}]/gu
+
+const LANGUAGE_SCRIPT_PATTERNS: Record<SupportedLanguage, RegExp> = {
+  ar: /\p{Script=Arabic}/u,
+  en: /\p{Script=Latin}/u,
+  es: /\p{Script=Latin}/u,
+  fr: /\p{Script=Latin}/u,
+  ru: /\p{Script=Cyrillic}/u,
+}
+
+const BUILT_IN_ALLOW_WORDS: Partial<
+  Record<SupportedLanguage, readonly string[]>
+> = {
+  en: ['cipa', 'hoare', 'root', 'sex', 'sm', 'xx', 'xxx'],
+  fr: ['con', 'cons', 'queue'],
+}
+
+const BUILT_IN_ADD_WORDS: Partial<
+  Record<SupportedLanguage, readonly string[]>
+> = {
+  ru: [
+    'блять',
+    'ебучая',
+    'пизда',
+    'пиздеца',
+    'пиздецкий',
+    'схуяли',
+    'хуйнуть',
+    'хуйню',
+  ],
+}
+
 /**
  * Configures the dictionaries and replacement behavior shared by every API.
  */
@@ -14,7 +51,8 @@ export interface IMouthwashDictionaryOptions {
   /**
    * Languages whose built-in dictionaries are enabled.
    *
-   * The default is all values from {@link SUPPORTED_LANGUAGES}.
+   * The default is {@link DEFAULT_LANGUAGES}. Select additional languages
+   * explicitly to avoid unrelated dictionaries matching ordinary code terms.
    */
   languages?: readonly SupportedLanguage[]
   /**
@@ -24,7 +62,7 @@ export interface IMouthwashDictionaryOptions {
    * columns. The default mask is `*`.
    */
   mask?: string
-  /** Project-specific words added to every enabled dictionary. */
+  /** Project-specific words matched independently of the enabled languages. */
   addWords?: readonly string[]
   /** Words that must never be masked, even if a dictionary contains them. */
   allowWords?: readonly string[]
@@ -59,14 +97,14 @@ const supportedLanguageSet = new Set<string>(SUPPORTED_LANGUAGES)
  * Preserving the caller's order makes sequential dictionary application
  * deterministic while removing duplicate engine work.
  *
- * @param languages - Requested language codes, or `undefined` for all defaults.
+ * @param languages - Requested language codes, or `undefined` for the defaults.
  * @returns A new array containing validated, unique language codes.
  * @throws {TypeError} When a runtime caller supplies an unsupported language.
  */
 function resolvedLanguages(
   languages: readonly SupportedLanguage[] | undefined,
 ): SupportedLanguage[] {
-  const values = languages ?? SUPPORTED_LANGUAGES
+  const values = languages ?? DEFAULT_LANGUAGES
   const unique: SupportedLanguage[] = []
 
   for (const language of values) {
@@ -125,6 +163,16 @@ export interface ISourceSanitizer {
 }
 
 /**
+ * Associates one profanity engine with the writing system it is allowed to
+ * inspect. Custom words omit the script restriction.
+ */
+interface IProfanityMatcher {
+  engine: ProfanityEngine
+  script?: RegExp
+  builtIn: boolean
+}
+
+/**
  * Orders comment ranges by their opening UTF-16 position.
  *
  * @param left - First range being compared.
@@ -142,8 +190,10 @@ function compareCommentRanges(
  * Creates a reusable, length-preserving source-comment sanitizer.
  *
  * Profanity engines are initialized once per configured language and then
- * reused across every source in a build. When no built-in languages are enabled,
- * a custom dictionary engine is still created if `addWords` contains entries.
+ * reused across every source in a build. Comment bodies are split into words
+ * before checking so Markdown punctuation and code operators cannot become
+ * wildcard profanity matches. Project-specific words use a separate matcher
+ * that works even when no built-in language is enabled.
  *
  * @param options - Language, mask, custom-word, and allow-list configuration.
  * @returns A sanitizer suitable for direct use or source-map traversal.
@@ -163,50 +213,71 @@ export function createSourceSanitizer(
   const mask = resolvedMask(options.mask)
   const addWords = copyWords(options.addWords)
   const allowWords = copyWords(options.allowWords)
-  const engines: ProfanityEngine[] = []
+  const matchers: IProfanityMatcher[] = []
 
   for (const language of languages) {
-    engines.push(
-      new ProfanityEngine({
+    matchers.push({
+      engine: new ProfanityEngine({
         language,
-        addWords,
-        whitelist: allowWords,
+        addWords: copyWords(BUILT_IN_ADD_WORDS[language]),
+        whitelist: [
+          ...copyWords(BUILT_IN_ALLOW_WORDS[language]),
+          ...allowWords,
+        ],
       }),
-    )
+      script: LANGUAGE_SCRIPT_PATTERNS[language],
+      builtIn: true,
+    })
   }
 
-  if (engines.length === 0 && addWords.length > 0) {
-    engines.push(
-      new ProfanityEngine({
+  if (addWords.length > 0) {
+    matchers.push({
+      engine: new ProfanityEngine({
         dictionary: addWords,
         whitelist: allowWords,
       }),
-    )
+      builtIn: false,
+    })
   }
 
   /**
-   * Applies every configured dictionary to one comment body in sequence.
+   * Checks whether one comment token matches any applicable dictionary.
+   *
+   * Built-in dictionaries are constrained to their native script. Very short
+   * obfuscated tokens are skipped because punctuation such as `x*y` is common
+   * in code comments and otherwise acts as a wildcard in the upstream engine.
+   *
+   * @param token - One word-like token extracted from a comment body.
+   * @returns `true` when the complete token should be masked.
+   */
+  function isProfaneToken(token: string): boolean {
+    for (const matcher of matchers) {
+      if (matcher.script && !matcher.script.test(token)) continue
+
+      if (
+        matcher.builtIn &&
+        OBFUSCATION_PATTERN.test(token) &&
+        (token.match(ALPHANUMERIC_PATTERN)?.length ?? 0) < 3
+      ) {
+        continue
+      }
+
+      if (matcher.engine.check(token)) return true
+    }
+
+    return false
+  }
+
+  /**
+   * Applies every configured dictionary to one comment body token by token.
    *
    * @param comment - Comment text without syntax delimiters.
    * @returns Masked text with exactly the same UTF-16 length as the input.
-   * @throws {Error} If the underlying engine unexpectedly changes text length.
    */
   function cleanComment(comment: string): string {
-    let result = comment
-
-    for (const engine of engines) {
-      const next = engine.censor(result, mask)
-
-      if (next.length !== result.length) {
-        throw new Error(
-          'The profanity engine changed a comment length; refusing to corrupt source-map columns.',
-        )
-      }
-
-      result = next
-    }
-
-    return result
+    return comment.replace(COMMENT_WORD_PATTERN, (token) =>
+      isProfaneToken(token) ? mask.repeat(token.length) : token,
+    )
   }
 
   return {
@@ -220,7 +291,7 @@ export function createSourceSanitizer(
     sanitize(source, filename) {
       const ranges = findCommentBodies(source, filename).sort(compareCommentRanges)
 
-      if (ranges.length === 0 || engines.length === 0) {
+      if (ranges.length === 0 || matchers.length === 0) {
         return { code: source, changedComments: 0 }
       }
 

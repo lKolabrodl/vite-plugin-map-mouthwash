@@ -1,12 +1,16 @@
 import { Buffer } from 'node:buffer'
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { build } from 'vite'
 
-import mapMouthwash, { mapMouthwash as namedMapMouthwash } from '../src/index.js'
+import mapMouthwash, {
+  DEFAULT_LANGUAGES,
+  mapMouthwash as namedMapMouthwash,
+  SUPPORTED_LANGUAGES,
+} from '../src/index.js'
 
 const temporaryDirectories: string[] = []
 
@@ -22,6 +26,7 @@ describe('mapMouthwash', () => {
   it('exposes matching default and named plugin factories', () => {
     expect(mapMouthwash).toBe(namedMapMouthwash)
     expect(mapMouthwash().name).toBe('vite-plugin-map-mouthwash')
+    expect(DEFAULT_LANGUAGES).toEqual(['en'])
   })
 
   it('cleans the emitted map without changing source length or literals', async () => {
@@ -42,7 +47,7 @@ describe('mapMouthwash', () => {
       configFile: false,
       root,
       logLevel: 'silent',
-      plugins: [mapMouthwash()],
+      plugins: [mapMouthwash({ languages: SUPPORTED_LANGUAGES })],
       build: {
         emptyOutDir: true,
         lib: {
@@ -89,7 +94,7 @@ describe('mapMouthwash', () => {
       configFile: false,
       root,
       logLevel: 'silent',
-      plugins: [mapMouthwash()],
+      plugins: [mapMouthwash({ languages: ['en', 'ru'] })],
       build: {
         emptyOutDir: true,
         lib: {
@@ -125,5 +130,80 @@ describe('mapMouthwash', () => {
       'export const value = 1 // **** *****\n',
     )
     expect(map.sourcesContent[0]).toHaveLength(source.length)
+  })
+
+  it('excludes dependencies by default and supports an explicit opt-in', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'map-mouthwash-dependencies-'))
+    temporaryDirectories.push(root)
+
+    const dependencyDirectory = join(root, 'node_modules', 'demo-mouthwash')
+    const entryPath = join(root, 'entry.js')
+    const dependencySource = '// shit\nexport const value = 1\n'
+
+    await mkdir(dependencyDirectory, { recursive: true })
+    await writeFile(
+      join(dependencyDirectory, 'package.json'),
+      JSON.stringify({
+        name: 'demo-mouthwash',
+        type: 'module',
+        exports: './index.js',
+      }),
+      'utf8',
+    )
+    await writeFile(
+      join(dependencyDirectory, 'index.js'),
+      dependencySource,
+      'utf8',
+    )
+    await writeFile(
+      entryPath,
+      "export { value } from 'demo-mouthwash'\n",
+      'utf8',
+    )
+
+    for (const includeDependencies of [false, true]) {
+      const outDir = join(
+        root,
+        includeDependencies ? 'dist-included' : 'dist-default',
+      )
+
+      await build({
+        configFile: false,
+        root,
+        logLevel: 'silent',
+        plugins: [mapMouthwash({ includeDependencies })],
+        build: {
+          emptyOutDir: true,
+          lib: {
+            entry: entryPath,
+            fileName: 'bundle',
+            formats: ['es'],
+          },
+          minify: false,
+          outDir,
+          sourcemap: true,
+        },
+      })
+
+      const outputFiles = await readdir(outDir)
+      const mapFile = outputFiles.find((file) => file.endsWith('.map'))
+      expect(mapFile).toBeDefined()
+
+      const mapText = await readFile(join(outDir, mapFile!), 'utf8')
+      const map = JSON.parse(mapText) as {
+        sources: string[]
+        sourcesContent: string[]
+      }
+      const dependencyIndex = map.sources.findIndex((sourcePath) =>
+        sourcePath.includes('node_modules/demo-mouthwash/index.js'),
+      )
+
+      expect(dependencyIndex).toBeGreaterThanOrEqual(0)
+      expect(map.sourcesContent[dependencyIndex]).toBe(
+        includeDependencies
+          ? dependencySource.replace('shit', '****')
+          : dependencySource,
+      )
+    }
   })
 })

@@ -4,6 +4,7 @@ import type { Plugin } from 'vite'
 
 import {
   createSourceSanitizer,
+  DEFAULT_LANGUAGES,
   sanitizeSourceComments,
   SUPPORTED_LANGUAGES,
 } from './sanitizer.js'
@@ -14,7 +15,7 @@ import type {
 } from './sanitizer.js'
 import { sanitizeSourceMapObject } from './source-map.js'
 
-export { sanitizeSourceComments, SUPPORTED_LANGUAGES }
+export { DEFAULT_LANGUAGES, sanitizeSourceComments, SUPPORTED_LANGUAGES }
 export type {
   IMouthwashDictionaryOptions,
   ISanitizeSourceOptions,
@@ -26,9 +27,15 @@ export type {
  */
 export interface IMapMouthwashOptions extends IMouthwashDictionaryOptions {
   /**
+   * Also sanitizes source-map inputs inside `node_modules`.
+   * The default is `false` to avoid changing vendored source text.
+   */
+  includeDependencies?: boolean
+  /**
    * Selects source-map inputs that may be sanitized.
    *
-   * Return `false` for generated, vendored, or otherwise exempt source paths.
+   * Return `false` for generated or otherwise exempt source paths. This filter
+   * runs after the default `node_modules` exclusion.
    */
   filter?: (sourcePath: string) => boolean
   /**
@@ -36,6 +43,29 @@ export interface IMapMouthwashOptions extends IMouthwashDictionaryOptions {
    * The default is `false`.
    */
   report?: boolean
+}
+
+const dependencyPathPattern = /(?:^|[/\\])node_modules(?:[/\\]|$)/iu
+
+/**
+ * Composes the dependency policy and a caller-provided source filter.
+ *
+ * @param options - Complete plugin options used for both checks.
+ * @returns One predicate shared by external, mutable, and inline source maps.
+ */
+function createSourceFilter(
+  options: IMapMouthwashOptions,
+): (sourcePath: string) => boolean {
+  return (sourcePath) => {
+    if (
+      !options.includeDependencies &&
+      dependencyPathPattern.test(sourcePath)
+    ) {
+      return false
+    }
+
+    return options.filter?.(sourcePath) ?? true
+  }
 }
 
 /**
@@ -158,6 +188,7 @@ function sanitizeInlineSourceMaps(
  */
 export function mapMouthwash(options: IMapMouthwashOptions = {}): Plugin {
   const sanitizer = createSourceSanitizer(options)
+  const filter = createSourceFilter(options)
 
   return {
     name: 'vite-plugin-map-mouthwash',
@@ -182,7 +213,7 @@ export function mapMouthwash(options: IMapMouthwashOptions = {}): Plugin {
             const clean = sanitizeSourceMapObject(
               output.map,
               sanitizer,
-              options.filter,
+              filter,
             )
 
             if (clean.changedComments > 0) {
@@ -195,7 +226,7 @@ export function mapMouthwash(options: IMapMouthwashOptions = {}): Plugin {
           const inline = sanitizeInlineSourceMaps(
             output.code,
             sanitizer,
-            options.filter,
+            filter,
           )
           output.code = inline.code
           changedMaps += inline.changedMaps
@@ -224,7 +255,7 @@ export function mapMouthwash(options: IMapMouthwashOptions = {}): Plugin {
         const clean = sanitizeSourceMapObject(
           parsed,
           sanitizer,
-          options.filter,
+          filter,
         )
 
         if (clean.changedComments === 0) continue

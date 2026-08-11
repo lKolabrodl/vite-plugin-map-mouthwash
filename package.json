@@ -1,7 +1,19 @@
 {
   "name": "vite-plugin-map-mouthwash",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A Vite plugin that masks multilingual profanity in source-map comments without shifting mappings.",
+  "homepage": "https://github.com/lKolabrodl/vite-plugin-map-mouthwash#readme",
+  "bugs": {
+    "url": "https://github.com/lKolabrodl/vite-plugin-map-mouthwash/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lKolabrodl/vite-plugin-map-mouthwash.git"
+  },
+  "author": {
+    "name": "lKolabrodl",
+    "url": "https://github.com/lKolabrodl"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -41,11 +53,24 @@
     "rollup-plugin",
     "sourcemap",
     "source-map",
+    "source-map-comments",
     "profanity",
+    "profanity-filter",
+    "multilingual",
+    "typescript",
+    "arabic",
+    "english",
+    "french",
+    "russian",
+    "spanish",
     "comments"
   ],
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "peerDependencies": {
     "vite": ">=5.0.0 <9.0.0"

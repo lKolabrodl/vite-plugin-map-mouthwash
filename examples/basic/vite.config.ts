@@ -4,7 +4,12 @@ import mapMouthwash from '../../src/index.js'
 
 export default defineConfig({
   base: './',
-  plugins: [mapMouthwash({ report: true })],
+  plugins: [
+    mapMouthwash({
+      languages: ['ar', 'en', 'es', 'fr', 'ru'],
+      report: true,
+    }),
+  ],
   build: {
     emptyOutDir: true,
     rollupOptions: {

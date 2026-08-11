@@ -4,15 +4,15 @@
 
 `vite-plugin-map-mouthwash` masks profanity found in comments stored inside source maps. It does not modify application code, string literals, regular expressions, or source-map coordinates.
 
-Five official UN languages are enabled by default. Chinese is deliberately excluded for now.
+Five languages are supported. English is the only default; enable other dictionaries explicitly. This conservative default avoids unrelated language dictionaries treating ordinary technical words as profanity.
 
 | Language | Code | Enabled by default |
 | --- | --- | --- |
-| Arabic | `ar` | Yes |
+| Arabic | `ar` | No |
 | English | `en` | Yes |
-| French | `fr` | Yes |
-| Russian | `ru` | Yes |
-| Spanish | `es` | Yes |
+| French | `fr` | No |
+| Russian | `ru` | No |
+| Spanish | `es` | No |
 
 ## Installation
 
@@ -57,8 +57,9 @@ The plugin replaces every matched UTF-16 code unit with one mask code unit. Sour
 mapMouthwash({
   languages: ['en', 'ru'],
   mask: '█',
-  addWords: ['project-specific-term'],
-  allowWords: ['allowed-term'],
+  addWords: ['projectterm'],
+  allowWords: ['allowedterm'],
+  includeDependencies: false,
   filter: (sourcePath) => !sourcePath.includes('/vendor/'),
   report: true,
 })
@@ -66,11 +67,12 @@ mapMouthwash({
 
 | Option | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `languages` | `('ar' \| 'en' \| 'es' \| 'fr' \| 'ru')[]` | all five | Select built-in dictionaries. |
+| `languages` | `('ar' \| 'en' \| 'es' \| 'fr' \| 'ru')[]` | `['en']` | Select built-in dictionaries. |
 | `mask` | `string` | `'*'` | Use exactly one UTF-16 code unit as the mask. |
-| `addWords` | `string[]` | `[]` | Add project-specific blocked words. |
+| `addWords` | `string[]` | `[]` | Add project-specific blocked words independently of `languages`. |
 | `allowWords` | `string[]` | `[]` | Exempt known false positives. |
-| `filter` | `(sourcePath) => boolean` | all sources | Skip selected source-map inputs. |
+| `includeDependencies` | `boolean` | `false` | Also inspect sources under `node_modules`. |
+| `filter` | `(sourcePath) => boolean` | project sources | Skip selected source-map inputs after the dependency check. |
 | `report` | `boolean` | `false` | Print a build summary when comments change. |
 
 ## Standalone sanitizer
@@ -94,6 +96,8 @@ The built-in dictionaries currently come from the runtime dependency [`profanity
 
 Dictionary filters are imperfect by nature. New slang, inflected forms, regional usage, and intentional obfuscation may need custom entries. Legitimate words may need allow-list entries.
 
+The sanitizer checks word-like tokens instead of passing a complete comment to the dictionary engine. Markdown markers and code operators therefore do not become wildcard matches: text such as `**all**`, `**и**`, and `x*y` stays intact. Built-in dictionaries inspect only their native writing system; `addWords` remains script-independent. A small built-in allow-list protects common technical terms; add one of them to `addWords` to force masking in a project. When a token is masked, combining marks and internal obfuscation characters are masked with it so UTF-16 length remains unchanged.
+
 ## Supported source forms
 
 - `//`, `/* ... */`, and hashbang comments in JavaScript and TypeScript;
@@ -101,9 +105,10 @@ Dictionary filters are imperfect by nature. New slang, inflected forms, regional
 - comments inside `${...}` template expressions, but not raw template text;
 - CSS block comments and `//` comments in Sass, SCSS, Less, and Stylus;
 - HTML comments plus embedded `<script>` and `<style>` blocks in HTML, Vue, Svelte, and Astro;
+- XML and SVG comments;
 - standard, indexed, external, hidden, Base64-inline, and percent-encoded inline source maps.
 
-The plugin only sanitizes `sourcesContent`. It does not create source maps, so `build.sourcemap` must be enabled. Maps emitted without source content have nothing to sanitize.
+Common binary asset sources, JSON, and nested source-map files are ignored. The plugin only sanitizes `sourcesContent`. It does not create source maps, so `build.sourcemap` must be enabled. Maps emitted without source content have nothing to sanitize.
 
 ## Runnable example
 

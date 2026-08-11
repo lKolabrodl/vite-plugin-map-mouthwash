@@ -77,6 +77,11 @@ describe('findCommentBodies', () => {
     expect(commentTexts('// ignored', 'data.json')).toEqual([])
     expect(commentTexts('// ignored', 'data.json5')).toEqual([])
     expect(commentTexts('// ignored', 'bundle.map')).toEqual([])
+    expect(commentTexts('// ignored', 'image.png')).toEqual([])
+    expect(commentTexts('// ignored', 'font.woff2?url')).toEqual([])
+    expect(
+      commentTexts('<!-- svg comment --><text>// text</text>', 'icon.svg'),
+    ).toEqual([' svg comment '])
   })
 
   it('handles unterminated comments, strings, regexes, tags, and templates', () => {

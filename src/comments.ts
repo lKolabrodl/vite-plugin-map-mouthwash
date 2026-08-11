@@ -35,7 +35,15 @@ const REGEX_PREFIX_KEYWORDS = new Set([
   'yield',
 ])
 
-const HTML_EXTENSIONS = new Set(['astro', 'htm', 'html', 'svelte', 'vue'])
+const HTML_EXTENSIONS = new Set([
+  'astro',
+  'htm',
+  'html',
+  'svelte',
+  'svg',
+  'vue',
+  'xml',
+])
 const CSS_EXTENSIONS = new Set(['css'])
 const CSS_WITH_LINE_COMMENTS_EXTENSIONS = new Set([
   'less',
@@ -44,7 +52,27 @@ const CSS_WITH_LINE_COMMENTS_EXTENSIONS = new Set([
   'styl',
   'stylus',
 ])
-const COMMENTLESS_EXTENSIONS = new Set(['json', 'json5', 'map'])
+const COMMENTLESS_EXTENSIONS = new Set([
+  'avif',
+  'bmp',
+  'eot',
+  'gif',
+  'ico',
+  'jpeg',
+  'jpg',
+  'json',
+  'json5',
+  'map',
+  'otf',
+  'pdf',
+  'png',
+  'tif',
+  'tiff',
+  'ttf',
+  'webp',
+  'woff',
+  'woff2',
+])
 
 /**
  * Determines whether a UTF-16 code unit is JavaScript whitespace.
@@ -644,7 +672,7 @@ function extensionOf(sourceName: string): string {
  * Vite virtual module queries such as `?type=script` and `?type=style` take
  * precedence over the physical extension. Unknown source types deliberately use
  * the JavaScript scanner because most Vite source-map inputs are JS-family text.
- * JSON and source-map inputs are treated as commentless.
+ * Structured data and common binary asset formats are treated as commentless.
  *
  * @param source - Exact `sourcesContent` text to inspect.
  * @param sourceName - Associated source-map path used for syntax selection.

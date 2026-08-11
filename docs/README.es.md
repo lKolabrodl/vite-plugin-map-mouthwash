@@ -4,7 +4,7 @@
 
 `vite-plugin-map-mouthwash` enmascara palabras malsonantes dentro de los comentarios guardados en los mapas de código fuente. No modifica el código de la aplicación, las cadenas, las expresiones regulares ni las coordenadas del mapa.
 
-Los diccionarios de árabe (`ar`), inglés (`en`), español (`es`), francés (`fr`) y ruso (`ru`) están activados por defecto. El chino se excluye intencionadamente por ahora.
+Se admiten los diccionarios de árabe (`ar`), inglés (`en`), español (`es`), francés (`fr`) y ruso (`ru`). Solo el inglés está activado por defecto; selecciona los demás explícitamente para reducir falsos positivos en términos técnicos.
 
 ## Instalación
 
@@ -49,23 +49,27 @@ Cada unidad UTF-16 detectada se sustituye por una unidad de máscara. Por eso la
 mapMouthwash({
   languages: ['es', 'en'],
   mask: '█',
-  addWords: ['término-interno'],
-  allowWords: ['palabra-permitida'],
+  addWords: ['términointerno'],
+  allowWords: ['palabrapermitida'],
+  includeDependencies: false,
   filter: (sourcePath) => !sourcePath.includes('/vendor/'),
   report: true,
 })
 ```
 
-- `languages` selecciona los diccionarios `ar`, `en`, `es`, `fr`, `ru`;
+- `languages` selecciona los diccionarios `ar`, `en`, `es`, `fr`, `ru`; el valor predeterminado es `['en']`;
 - `mask` debe contener exactamente una unidad UTF-16;
-- `addWords` incorpora vocabulario específico del proyecto;
+- `addWords` incorpora vocabulario específico del proyecto independientemente de los idiomas;
 - `allowWords` evita falsos positivos;
-- `filter` omite fuentes concretas;
+- `includeDependencies` incluye `node_modules`, que se omite por defecto;
+- `filter` omite fuentes concretas después de comprobar las dependencias;
 - `report` muestra un resumen de la compilación.
 
 ## Diccionarios y limitaciones
 
 Las listas integradas proceden de la dependencia [`profanity-guard`](https://github.com/AkshayBenny/profanity-guard), que se instala automáticamente. Ningún filtro léxico conoce toda la jerga, todas las flexiones o todas las variantes regionales; usa `addWords` y `allowWords` para adaptarlo.
+
+Los comentarios se comprueban palabra por palabra. Así, Markdown y operadores como `**all**`, `**и**` y `x*y` no se convierten en comodines del diccionario. Cada diccionario integrado se limita a su sistema de escritura, mientras que `addWords` funciona con cualquier escritura. Una pequeña lista de permitidos protege términos técnicos comunes; añade uno de ellos a `addWords` para forzar su enmascaramiento.
 
 El plugin solo procesa `sourcesContent` y no activa los mapas automáticamente. Configura `build.sourcemap` en Vite.
 

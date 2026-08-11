@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createSourceSanitizer,
+  DEFAULT_LANGUAGES,
   sanitizeSourceComments,
   SUPPORTED_LANGUAGES,
 } from '../src/sanitizer.js'
@@ -19,7 +20,10 @@ describe('sanitizeSourceComments', () => {
       '// 操你妈',
     ].join('\n')
 
-    const clean = sanitizeSourceComments(source, { filename: 'entry.ts' })
+    const clean = sanitizeSourceComments(source, {
+      filename: 'entry.ts',
+      languages: SUPPORTED_LANGUAGES,
+    })
 
     expect(clean).toHaveLength(source.length)
     expect(clean).toContain('const literal = "shit // merde";')
@@ -39,7 +43,10 @@ describe('sanitizeSourceComments', () => {
       '// блять',
     ].join('\n')
 
-    const clean = sanitizeSourceComments(source, { filename: 'theme.scss' })
+    const clean = sanitizeSourceComments(source, {
+      filename: 'theme.scss',
+      languages: ['es', 'ru'],
+    })
 
     expect(clean).toHaveLength(source.length)
     expect(clean).toContain('content: "shit /* merde */"')
@@ -56,7 +63,10 @@ describe('sanitizeSourceComments', () => {
       '<style>.x::after { content: "mierda" } /* mierda */</style>',
     ].join('\n')
 
-    const clean = sanitizeSourceComments(source, { filename: 'View.vue' })
+    const clean = sanitizeSourceComments(source, {
+      filename: 'View.vue',
+      languages: ['es', 'fr'],
+    })
 
     expect(clean).toHaveLength(source.length)
     expect(clean).toContain('<!-- ****** -->')
@@ -90,6 +100,54 @@ describe('sanitizeSourceComments', () => {
         addWords: ['bananas'],
       }),
     ).toBe('// *******')
+
+    expect(
+      sanitizeSourceComments('// банан', {
+        filename: 'entry.js',
+        languages: ['en'],
+        addWords: ['банан'],
+      }),
+    ).toBe('// *****')
+  })
+
+  it('uses English only by default', () => {
+    expect(
+      sanitizeSourceComments('// shit merde mierda блять متناك', {
+        filename: 'entry.js',
+      }),
+    ).toBe('// **** merde mierda блять متناك')
+  })
+
+  it('does not treat Markdown or code punctuation as profanity wildcards', () => {
+    const source = [
+      '// native **и** web',
+      '// x*y=T/Z',
+      '// *is* and **all**',
+      '// queue root sex sm xx xxx',
+      '// cipa hoare con cons',
+      '// f*ck',
+    ].join('\n')
+
+    const clean = sanitizeSourceComments(source, {
+      filename: 'entry.ts',
+      languages: SUPPORTED_LANGUAGES,
+    })
+
+    expect(clean).toBe(source.replace('f*ck', '****'))
+  })
+
+  it('covers common Russian forms and masks decomposed Unicode completely', () => {
+    const source =
+      '// РАССЛАБЛЯТЬСЯ БЛЯТЬ пиздеца пиздецкий хуйню схуяли хуйнуть ебучая'
+    const clean = sanitizeSourceComments(source, {
+      filename: 'entry.ts',
+      languages: ['ru'],
+    })
+
+    expect(clean).toHaveLength(source.length)
+    expect(clean).toBe(
+      '// РАССЛАБЛЯТЬСЯ ***** ******* ********** ***** ****** ******* ******',
+    )
   })
 
   it('returns unchanged text when no engine or recognized comment is available', () => {
@@ -130,7 +188,8 @@ describe('sanitizeSourceComments', () => {
     }
   })
 
-  it('publishes exactly the requested default language set', () => {
+  it('publishes the supported and default language sets', () => {
     expect(SUPPORTED_LANGUAGES).toEqual(['ar', 'en', 'es', 'fr', 'ru'])
+    expect(DEFAULT_LANGUAGES).toEqual(['en'])
   })
 })
