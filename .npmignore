@@ -1,0 +1,17 @@
+# `package.json#files` is the primary publish allow-list. These rules are a
+# second line of defense if that list is broadened or removed later.
+.github/
+.idea/
+.vscode/
+__tests__/
+coverage/
+node_modules/
+src/
+
+examples/basic/dist/
+dist/**/*.map
+
+*.tgz
+*.tsbuildinfo
+tsconfig*.json
+vitest.config.ts

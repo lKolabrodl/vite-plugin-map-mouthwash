@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-map-mouthwash",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A Vite plugin that masks multilingual profanity in source-map comments without shifting mappings.",
   "homepage": "https://github.com/lKolabrodl/vite-plugin-map-mouthwash#readme",
   "bugs": {
@@ -26,7 +26,8 @@
   },
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
+    "dist/**/*.d.ts",
+    "dist/**/*.js",
     "docs",
     "examples/basic/README.md",
     "examples/basic/index.html",
